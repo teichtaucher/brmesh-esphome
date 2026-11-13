@@ -11,15 +11,22 @@ std::vector<uint8_t> BrmeshProtocol::build_light_payload(uint16_t address, bool 
                                                          uint8_t green, uint8_t blue, bool has_rgb,
                                                          bool has_color_temperature, uint8_t cold, uint8_t warm) {
   const uint8_t addr_low = address & 0xFF;
-  const uint8_t output_level = state ? level : 0;
 
-  if (has_rgb && state)
-    return {0x72, addr_low, output_level, blue, red, green};
+  if (!state)
+    return {0x22, addr_low, 0x00, 0x00, 0x00, 0x00};
 
-  if (has_color_temperature && state)
-    return {0x82, addr_low, output_level, 0x00, cold, warm};
+  // Single-device layout as used by esphome-fastcon (and observed to be stored by the bulbs across a
+  // power cycle): [0] 2 | ((data_len + 1) << 4), [1] address, [2] 0x80 | level (0x80 = on),
+  // [3] blue, [4] red, [5] green, [6] warm, [7] cold.
+  const uint8_t power_level = static_cast<uint8_t>(0x80 | (level & 0x7F));
 
-  return {0x22, addr_low, output_level, 0x00, 0x00, 0x00};
+  if (has_rgb)
+    return {0x72, addr_low, power_level, blue, red, green, 0x00, 0x00};
+
+  if (has_color_temperature)
+    return {0x72, addr_low, power_level, 0x00, 0x00, 0x00, warm, cold};
+
+  return {0x22, addr_low, level, 0x00, 0x00, 0x00};
 }
 
 std::vector<uint8_t> BrmeshProtocol::build_group_light_command(bool state, uint8_t level, uint8_t red, uint8_t green,

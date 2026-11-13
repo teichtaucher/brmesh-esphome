@@ -204,6 +204,28 @@ void BrmeshHub::send_light_state(uint16_t address, bool state, float brightness,
                       this->get_command_airtime_ms(), 3, owner, after_write, address > 256);
 }
 
+void BrmeshHub::send_persist_light_state(uint16_t address, bool state, float brightness, float red, float green,
+                                         float blue, bool has_rgb, bool has_color_temperature,
+                                         float color_temperature, uintptr_t owner) {
+  const uint8_t high = address >> 8;
+  const uint8_t level = state ? scale_brightness_(brightness) : 0;
+  uint8_t cold = 0;
+  uint8_t warm = 0;
+  if (has_color_temperature && state) {
+    float ct = clamp(color_temperature, 0.0f, 1.0f);
+    warm = static_cast<uint8_t>(roundf(ct * 255.0f));
+    cold = static_cast<uint8_t>(255 - warm);
+  }
+  // Newest value per address wins; does not touch the group write that was queued just before.
+  this->cancel_owner_(owner);
+  auto payload = BrmeshProtocol::build_light_payload(address, state, level, scale_color_(red), scale_color_(green),
+                                                     scale_color_(blue), has_rgb, has_color_temperature, cold, warm);
+  ESP_LOGD(TAG, "BRmesh persist write addr=%u payload=%s", address, BrmeshProtocol::format_hex(payload).c_str());
+  // Lower priority than normal commands, no state query afterwards.
+  this->send_command_(5, payload.data(), payload.size(), this->key_.data(), true, high, 0,
+                      this->get_command_airtime_ms(), 2, owner, nullptr, address > 256);
+}
+
 void BrmeshHub::send_temp_group_light_state(const std::vector<uint16_t> &addresses, bool state, float brightness,
                                             float red, float green, float blue, bool has_rgb,
                                             bool has_color_temperature, float color_temperature, uintptr_t owner) {
@@ -1372,6 +1394,13 @@ void BrmeshLight::dispatch_(const light::LightColorValues &values) {
   if (!this->addresses_.empty()) {
     this->parent_->send_temp_group_light_state(this->addresses_, binary, brightness, red, green, blue, has_rgb,
                                               has_color_temperature, color_temperature, owner);
+    // Follow the fast group command with one direct write per bulb, so every bulb also stores the state
+    // and powers up with it after the wall switch was off.
+    if (this->persist_state_) {
+      for (size_t i = 0; i < this->addresses_.size(); i++)
+        this->parent_->send_persist_light_state(this->addresses_[i], binary, brightness, red, green, blue, has_rgb,
+                                                has_color_temperature, color_temperature, owner + 1 + i);
+    }
   } else {
     this->parent_->send_light_state(this->address_, binary, brightness, red, green, blue, has_rgb,
                                     has_color_temperature, color_temperature, owner);

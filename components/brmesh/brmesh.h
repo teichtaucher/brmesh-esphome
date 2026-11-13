@@ -73,6 +73,10 @@ class BrmeshHub : public Component {
   // owner: opaque tag used to supersede older packets from the same entity (0 = never superseded).
   void send_light_state(uint16_t address, bool state, float brightness, float red, float green, float blue,
                         bool has_rgb, bool has_color_temperature, float color_temperature, uintptr_t owner = 0);
+  // Per-address write so each bulb stores the state (temporary-group writes are not stored by the bulbs).
+  void send_persist_light_state(uint16_t address, bool state, float brightness, float red, float green, float blue,
+                                bool has_rgb, bool has_color_temperature, float color_temperature,
+                                uintptr_t owner);
   void send_temp_group_light_state(const std::vector<uint16_t> &addresses, bool state, float brightness, float red,
                                    float green, float blue, bool has_rgb, bool has_color_temperature,
                                    float color_temperature, uintptr_t owner = 0);
@@ -366,6 +370,7 @@ class BrmeshLight : public light::LightOutput, public Component {
   void set_address(uint16_t address) { this->address_ = address; }
   void set_addresses(const std::vector<uint16_t> &addresses) { this->addresses_ = addresses; }
   void set_supports_cold_warm(bool supports) { this->supports_cold_warm_ = supports; }
+  void set_persist_state(bool persist) { this->persist_state_ = persist; }
 
   light::LightTraits get_traits() override;
   void setup_state(light::LightState *state) override;
@@ -398,6 +403,7 @@ class BrmeshLight : public light::LightOutput, public Component {
   BrmeshHub *parent_{nullptr};
   uint16_t address_{0};
   std::vector<uint16_t> addresses_{};
+  bool persist_state_{true};
   bool supports_cold_warm_{true};
   light::LightState *state_{nullptr};
   bool write_pending_{false};

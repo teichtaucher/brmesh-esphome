@@ -12,6 +12,7 @@ CONF_ADDRESS = "address"
 CONF_ADDRESSES = "addresses"
 CONF_BRMESH_ID = "brmesh_id"
 CONF_SUPPORTS_COLD_WARM = "supports_cold_warm"
+CONF_PERSIST_STATE = "persist_state"
 CONF_DEFAULT_TRANSITION_LENGTH = "default_transition_length"
 CONF_BUILTIN_EFFECTS = "builtin_effects"
 CONF_PRESET = "preset"
@@ -131,6 +132,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_ADDRESS): cv.int_range(min=1, max=65535),
             cv.Optional(CONF_ADDRESSES): cv.ensure_list(cv.int_range(min=1, max=65535)),
             cv.Optional(CONF_SUPPORTS_COLD_WARM, default=True): cv.boolean,
+            cv.Optional(CONF_PERSIST_STATE, default=True): cv.boolean,
             cv.Optional(CONF_DEFAULT_TRANSITION_LENGTH, default="0s"): cv.positive_time_period_milliseconds,
             # Add the app's 21 built-in fade/flash modes as effects. Set false to keep the list short.
             cv.Optional(CONF_BUILTIN_EFFECTS, default=True): cv.boolean,
@@ -151,6 +153,7 @@ async def to_code(config):
     if CONF_ADDRESSES in config:
         cg.add(var.set_addresses(config[CONF_ADDRESSES]))
     cg.add(var.set_supports_cold_warm(config[CONF_SUPPORTS_COLD_WARM]))
+    cg.add(var.set_persist_state(config[CONF_PERSIST_STATE]))
     if config[CONF_BUILTIN_EFFECTS]:
         state = await cg.get_variable(config[CONF_ID])
         effects = []

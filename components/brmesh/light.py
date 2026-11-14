@@ -113,6 +113,7 @@ async def brmesh_mode_effect_to_code(config, effect_id):
         colors = config[CONF_COLORS]
     cg.add(var.set_scene(scene_bytes(style, colors)))
     cg.add(var.set_jiffies(config.get(CONF_JIFFIES, speed_to_jiffies(style, config[CONF_SPEED]))))
+    cg.add(var.set_flash(style == "flash"))
     return var
 
 
@@ -162,5 +163,6 @@ async def to_code(config):
             effect = cg.new_Pvariable(effect_id, name)
             cg.add(effect.set_scene(scene_bytes(style, colors)))
             cg.add(effect.set_jiffies(speed_to_jiffies(style, 1)))
+            cg.add(effect.set_flash(style == "flash"))
             effects.append(effect)
         cg.add(state.add_effects(effects))

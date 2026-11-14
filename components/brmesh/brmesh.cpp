@@ -1343,9 +1343,30 @@ void BrmeshLight::loop() {
     this->dispatch_mode_();
 }
 
-void BrmeshLight::start_mode(const std::vector<uint8_t> &scene, uint8_t jiffies) {
+uint8_t BrmeshLight::effective_mode_jiffies_() const {
+  if (this->effect_speed_ == 0)
+    return this->mode_jiffies_;
+  // ModFragment.speedExchange: fade modes count up from 1, flash modes count down from 200 in steps of 2.
+  const int speed = std::max<int>(1, std::min<int>(100, this->effect_speed_));
+  if (this->mode_flash_)
+    return static_cast<uint8_t>(std::max(1, 200 - (speed - 1) * 2));
+  return static_cast<uint8_t>(speed);
+}
+
+void BrmeshLight::set_effect_speed(uint8_t speed) {
+  if (speed > 100)
+    speed = 100;
+  if (speed == this->effect_speed_)
+    return;
+  this->effect_speed_ = speed;
+  if (this->mode_active_ && this->parent_ != nullptr && this->parent_->is_ready())
+    this->dispatch_mode_();
+}
+
+void BrmeshLight::start_mode(const std::vector<uint8_t> &scene, uint8_t jiffies, bool flash) {
   this->mode_scene_ = scene;
   this->mode_jiffies_ = jiffies;
+  this->mode_flash_ = flash;
   this->mode_active_ = true;
   if (this->parent_ == nullptr || !this->parent_->is_ready()) {
     // dispatched from loop() once BLE is up, right after the pending normal write
@@ -1372,9 +1393,10 @@ void BrmeshLight::dispatch_mode_() {
     return;
   // Owner 0 on purpose: the mode packet must queue behind (not cancel) the normal write just dispatched.
   if (!this->addresses_.empty())
-    this->parent_->send_temp_group_scene_control(this->addresses_, this->mode_jiffies_, this->mode_scene_, 0);
+    this->parent_->send_temp_group_scene_control(this->addresses_, this->effective_mode_jiffies_(), this->mode_scene_,
+                                                 0);
   else
-    this->parent_->send_scene_control(this->address_, this->mode_jiffies_, this->mode_scene_, 0);
+    this->parent_->send_scene_control(this->address_, this->effective_mode_jiffies_(), this->mode_scene_, 0);
 }
 
 void BrmeshLight::dispatch_(const light::LightColorValues &values) {

@@ -382,7 +382,10 @@ class BrmeshLight : public light::LightOutput, public Component {
   void on_transmit_dropped(bool after_ble_reset = false);
   bool has_pending_write() const { return this->write_pending_; }
   // Called by BrmeshModeEffect: run a bulb-side animation until stop_mode() or the next normal write.
-  void start_mode(const std::vector<uint8_t> &scene, uint8_t jiffies);
+  void start_mode(const std::vector<uint8_t> &scene, uint8_t jiffies, bool flash = false);
+  // App speed 1..100 for all modes of this light (0 = use each effect's own speed). Re-sends a running mode.
+  void set_effect_speed(uint8_t speed);
+  uint8_t get_effect_speed() const { return this->effect_speed_; }
   void stop_mode();
   bool is_mode_active() const { return this->mode_active_; }
 
@@ -398,6 +401,9 @@ class BrmeshLight : public light::LightOutput, public Component {
   bool mode_active_{false};
   std::vector<uint8_t> mode_scene_;
   uint8_t mode_jiffies_{1};
+  bool mode_flash_{false};
+  uint8_t effect_speed_{0};
+  uint8_t effective_mode_jiffies_() const;
   void publish_values_(const light::LightColorValues &values);
 
   BrmeshHub *parent_{nullptr};
@@ -425,10 +431,11 @@ class BrmeshModeEffect : public light::LightEffect {
   explicit BrmeshModeEffect(const char *name) : light::LightEffect(name) {}
   void set_scene(const std::vector<uint8_t> &scene) { this->scene_ = scene; }
   void set_jiffies(uint8_t jiffies) { this->jiffies_ = jiffies; }
+  void set_flash(bool flash) { this->flash_ = flash; }
   void start() override {
     auto *output = static_cast<BrmeshLight *>(this->state_->get_output());
     if (output != nullptr)
-      output->start_mode(this->scene_, this->jiffies_);
+      output->start_mode(this->scene_, this->jiffies_, this->flash_);
   }
   void stop() override {
     auto *output = static_cast<BrmeshLight *>(this->state_->get_output());
@@ -440,6 +447,7 @@ class BrmeshModeEffect : public light::LightEffect {
  protected:
   std::vector<uint8_t> scene_;
   uint8_t jiffies_{1};
+  bool flash_{false};
 };
 
 template<typename... Ts> class BrmeshSendRawAction : public Action<Ts...> {

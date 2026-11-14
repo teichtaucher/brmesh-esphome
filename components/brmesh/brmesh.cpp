@@ -1319,6 +1319,16 @@ void BrmeshLight::setup_state(light::LightState *state) {
 
 void BrmeshLight::write_state(light::LightState *state) {
   this->state_ = state;
+  // The first write after boot only carries the restored state. With send_restored_state: false it is not
+  // transmitted: the bulbs power up with the state they stored themselves, and the radio stays free.
+  if (!this->boot_write_handled_) {
+    this->boot_write_handled_ = true;
+    if (!this->send_restored_state_) {
+      ESP_LOGD(TAG, "Skipping transmission of the restored state at boot");
+      this->last_values_ = state->current_values;
+      return;
+    }
+  }
   this->last_write_ms_ = millis();
   this->pending_values_ = state->current_values;
   this->last_values_ = this->pending_values_;

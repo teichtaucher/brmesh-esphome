@@ -371,6 +371,8 @@ class BrmeshLight : public light::LightOutput, public Component {
   void set_addresses(const std::vector<uint16_t> &addresses) { this->addresses_ = addresses; }
   void set_supports_cold_warm(bool supports) { this->supports_cold_warm_ = supports; }
   void set_persist_state(bool persist) { this->persist_state_ = persist; }
+  // false: do not transmit the state ESPHome restores at boot (the bulbs keep their own last state).
+  void set_send_restored_state(bool send) { this->send_restored_state_ = send; }
 
   light::LightTraits get_traits() override;
   void setup_state(light::LightState *state) override;
@@ -410,6 +412,8 @@ class BrmeshLight : public light::LightOutput, public Component {
   uint16_t address_{0};
   std::vector<uint16_t> addresses_{};
   bool persist_state_{true};
+  bool send_restored_state_{true};
+  bool boot_write_handled_{false};
   bool supports_cold_warm_{true};
   light::LightState *state_{nullptr};
   bool write_pending_{false};

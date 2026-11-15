@@ -204,6 +204,45 @@ void BrmeshHub::send_light_state(uint16_t address, bool state, float brightness,
                       this->get_command_airtime_ms(), 3, owner, after_write, address > 256);
 }
 
+void BrmeshHub::send_fixed_group_light_state(uint8_t group_id, const std::vector<uint16_t> &addresses, bool state,
+                                             float brightness, float red, float green, float blue, bool has_rgb,
+                                             bool has_color_temperature, float color_temperature,
+                                             uintptr_t owner) {
+  // Newest request from this entity wins.
+  this->cancel_owner_(owner);
+  const uint8_t level = state ? scale_brightness_(brightness) : 0;
+  uint8_t cold = 0;
+  uint8_t warm = 0;
+  if (has_color_temperature && state) {
+    float ct = clamp(color_temperature, 0.0f, 1.0f);
+    warm = static_cast<uint8_t>(roundf(ct * 255.0f));
+    cold = static_cast<uint8_t>(255 - warm);
+  }
+  auto command = BrmeshProtocol::build_group_light_command(state, level, scale_color_(red), scale_color_(green),
+                                                           scale_color_(blue), has_rgb, has_color_temperature, cold,
+                                                           warm);
+  auto payload = BrmeshProtocol::build_group_control_payload(GROUP_CONTROL_TYPE, group_id, command);
+  ESP_LOGD(TAG, "BRmesh fixed group %u write state=%s level=%u rgb=%s ct=%s payload=%s", group_id, ONOFF(state),
+           level, YESNO(has_rgb), YESNO(has_color_temperature), BrmeshProtocol::format_hex(payload).c_str());
+  std::function<void()> after_write;
+  if (this->query_after_write_ && !addresses.empty())
+    after_write = [this, addresses]() { this->query_states(addresses); };
+  this->send_command_(5, payload.data(), payload.size(), this->key_.data(), true, 0, 0,
+                      this->get_command_airtime_ms(), 3, owner, after_write);
+}
+
+void BrmeshHub::send_fixed_group_scene_control(uint8_t group_id, uint8_t jiffies, const std::vector<uint8_t> &scene,
+                                               uintptr_t owner) {
+  if (scene.empty())
+    return;
+  this->cancel_owner_(owner);
+  auto payload = BrmeshProtocol::build_group_scene_control_payload(group_id, jiffies, scene);
+  ESP_LOGD(TAG, "BRmesh fixed group %u mode jiffies=%u payload=%s", group_id, jiffies,
+           BrmeshProtocol::format_hex(payload).c_str());
+  this->send_command_(5, payload.data(), payload.size(), this->key_.data(), true, 0, 0,
+                      this->get_command_airtime_ms(), 3, owner);
+}
+
 void BrmeshHub::send_persist_light_state(uint16_t address, bool state, float brightness, float red, float green,
                                          float blue, bool has_rgb, bool has_color_temperature,
                                          float color_temperature, uintptr_t owner) {
@@ -1402,7 +1441,10 @@ void BrmeshLight::dispatch_mode_() {
   if (this->parent_ == nullptr || this->mode_scene_.empty())
     return;
   // Owner 0 on purpose: the mode packet must queue behind (not cancel) the normal write just dispatched.
-  if (!this->addresses_.empty())
+  if (this->use_group_id_)
+    this->parent_->send_fixed_group_scene_control(this->group_id_, this->effective_mode_jiffies_(), this->mode_scene_,
+                                                  0);
+  else if (!this->addresses_.empty())
     this->parent_->send_temp_group_scene_control(this->addresses_, this->effective_mode_jiffies_(), this->mode_scene_,
                                                  0);
   else
@@ -1423,7 +1465,10 @@ void BrmeshLight::dispatch_(const light::LightColorValues &values) {
   const bool has_rgb = color_mode == light::ColorMode::RGB;
   const bool has_color_temperature = this->supports_cold_warm_ && color_mode == light::ColorMode::COLOR_TEMPERATURE;
   const uintptr_t owner = reinterpret_cast<uintptr_t>(this);
-  if (!this->addresses_.empty()) {
+  if (this->use_group_id_) {
+    this->parent_->send_fixed_group_light_state(this->group_id_, this->addresses_, binary, brightness, red, green,
+                                                blue, has_rgb, has_color_temperature, color_temperature, owner);
+  } else if (!this->addresses_.empty()) {
     this->parent_->send_temp_group_light_state(this->addresses_, binary, brightness, red, green, blue, has_rgb,
                                               has_color_temperature, color_temperature, owner);
     // Follow the fast group command with one direct write per bulb, so every bulb also stores the state

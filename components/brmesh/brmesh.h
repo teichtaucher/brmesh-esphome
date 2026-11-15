@@ -73,6 +73,13 @@ class BrmeshHub : public Component {
   // owner: opaque tag used to supersede older packets from the same entity (0 = never superseded).
   void send_light_state(uint16_t address, bool state, float brightness, float red, float green, float blue,
                         bool has_rgb, bool has_color_temperature, float color_temperature, uintptr_t owner = 0);
+  // Writes to one of the app's own (stored) groups, exactly like the BRMesh app: no membership packets,
+  // and the bulbs keep the state across a power cycle.
+  void send_fixed_group_light_state(uint8_t group_id, const std::vector<uint16_t> &addresses, bool state,
+                                    float brightness, float red, float green, float blue, bool has_rgb,
+                                    bool has_color_temperature, float color_temperature, uintptr_t owner);
+  void send_fixed_group_scene_control(uint8_t group_id, uint8_t jiffies, const std::vector<uint8_t> &scene,
+                                      uintptr_t owner);
   // Per-address write so each bulb stores the state (temporary-group writes are not stored by the bulbs).
   void send_persist_light_state(uint16_t address, bool state, float brightness, float red, float green, float blue,
                                 bool has_rgb, bool has_color_temperature, float color_temperature,
@@ -373,6 +380,8 @@ class BrmeshLight : public light::LightOutput, public Component {
   void set_persist_state(bool persist) { this->persist_state_ = persist; }
   // false: do not transmit the state ESPHome restores at boot (the bulbs keep their own last state).
   void set_send_restored_state(bool send) { this->send_restored_state_ = send; }
+  // Use the app's stored group (e.g. 0 = "All") instead of the temporary group 253.
+  void set_group_id(uint8_t group_id) { this->group_id_ = group_id; this->use_group_id_ = true; }
 
   light::LightTraits get_traits() override;
   void setup_state(light::LightState *state) override;
@@ -413,6 +422,8 @@ class BrmeshLight : public light::LightOutput, public Component {
   std::vector<uint16_t> addresses_{};
   bool persist_state_{true};
   bool send_restored_state_{true};
+  bool use_group_id_{false};
+  uint8_t group_id_{0};
   bool boot_write_handled_{false};
   bool supports_cold_warm_{true};
   light::LightState *state_{nullptr};

@@ -172,4 +172,16 @@ async def to_code(config):
             cg.add(effect.set_jiffies(speed_to_jiffies(style, 1)))
             cg.add(effect.set_flash(style == "flash"))
             effects.append(effect)
-        cg.add(state.add_effects(effects))
+        # ESPHome changed LightState::add_effects (vector -> pointer + count). Fill a static table and let
+        # a small C++ helper pick whichever signature the installed ESPHome version offers.
+        table = f"{config[CONF_OUTPUT_ID].id}_effect_table"
+        cg.add_global(
+            cg.RawStatement(f"static esphome::light::LightEffect *{table}[{len(effects)}];")
+        )
+        for i, effect in enumerate(effects):
+            cg.add(cg.RawExpression(f"{table}[{i}] = {effect}"))
+        cg.add(
+            cg.RawExpression(
+                f"esphome::brmesh::brmesh_add_effects({state}, {table}, {len(effects)}, 0)"
+            )
+        )

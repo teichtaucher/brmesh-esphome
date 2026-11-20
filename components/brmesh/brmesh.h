@@ -441,6 +441,17 @@ class BrmeshLight : public light::LightOutput, public Component {
 
 // One entry in the light's effect list. Selecting it in Home Assistant sends the mode packet once; the bulbs
 // animate on their own. Selecting "None" (or any normal light change) sends the ordinary state back.
+// Works with both LightState::add_effects variants: (LightEffect *const *, size_t) in current ESPHome and
+// (const std::vector<LightEffect *> &) in older releases. The int overload wins when it compiles.
+template<typename S>
+auto brmesh_add_effects(S *state, light::LightEffect **effects, size_t count, int)
+    -> decltype(state->add_effects(effects, count), void()) {
+  state->add_effects(effects, count);
+}
+template<typename S> void brmesh_add_effects(S *state, light::LightEffect **effects, size_t count, long) {
+  state->add_effects(std::vector<light::LightEffect *>(effects, effects + count));
+}
+
 class BrmeshModeEffect : public light::LightEffect {
  public:
   explicit BrmeshModeEffect(const char *name) : light::LightEffect(name) {}
